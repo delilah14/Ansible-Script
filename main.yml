@@ -1,0 +1,140 @@
+---
+- hosts: docker
+  tasks:
+
+####### Install Docker Engine
+  - name: Get transport https
+    become: yes
+    apt:
+      name: apt-transport-https
+
+  - name: Update the apt package index
+    become: yes
+    apt:
+      name: "*"
+      state: latest
+      update_cache: yes
+      force_apt_get: yes
+ 
+  - name: Install Python
+    raw: sudo apt install python3
+
+  - name: Install packages for apt add repository over HTTPS
+    become: yes
+    apt:
+      name: "{{ packagesdep }}"
+      force_apt_get: yes
+      state: latest
+      update_cache: yes
+    vars:
+      packagesdep:
+      - git
+      - apt-transport-https
+      - ca-certificates
+      - wget
+      - software-properties-common
+      - gnupg2
+      - curl
+  - name: Add Apt signing key from official docker repo
+    become: yes
+    apt_key:
+      url: https://download.docker.com/linux/debian/gpg
+      state: present
+  - name: add docker official repository for Debian Stretch
+    become: yes
+    apt_repository:
+      repo: deb [arch=amd64] https://download.docker.com/linux/debian stretch stable
+      state: present
+  - name: Index new repo into the cache
+    become: yes
+    apt:
+      name: "*"
+      state: latest
+      update_cache: yes
+      force_apt_get: yes
+  - name: actually install docker
+    become: yes
+    apt:
+      name: "docker-ce"
+      state: latest
+#Pull node application
+  - name: Clone the code repos
+    become: yes
+    git:
+      repo: "https://github.com/delilah14/sample-node-js.git"
+      dest: /root/node-app/
+#Create Dockerfile and run the node app
+  - name: Copy dockerfile for node app
+    become: true
+    copy:
+      src: ~/ansible-assignment/Dockerfile
+      dest: ~/node-app/Dockerfile
+      owner: root
+      group: root
+      mode: '0644'
+        
+  - name: Got to node-app
+    become: true
+    command: ls
+    args:
+      chdir: /root/node-app/
+  - name: Install yum
+    become: true
+    raw: apt -y install yum
+  - name: Install pip docker
+    become: true
+    raw: sudo pip3 install docker
+  - name: Install dockerpty
+    become: true
+    raw: apt install -y python-dockerpty
+  - name: Install python3-pip
+    become: true
+    apt:
+      name: python3-pip
+      state: present
+  - name: build node project
+    become: true
+    docker_image:
+      name: my-nodejs-ansible
+      path: ~/node-app/
+      tag: 0.1
+      state: present    
+  - name: run the container
+    become: true
+    docker_container:
+      name: my-nodejs-ansible
+      image: my-nodejs-ansible:0.1
+      state: started
+      restart: yes
+      ports:
+        - "8080:5000"
+#Pull Nginx, Mount and Run it
+  - name: Pull Nginx image
+    become: true
+    docker_image:
+      name: nginx
+      tag: alpine
+      pull: yes
+  - name: Add config file
+    become: true
+    copy:
+      src: ~/ansible-assignment/default.conf
+      dest: /var/configuration/
+      owner: root
+      group: root
+      mode: '0644'
+    
+  - name: Mount and Run
+    become: true
+    docker_container:
+      name: my-nginx8
+      image: nginx:alpine
+      state: started
+      recreate: yes
+      restart: yes
+      ports:
+        - "80:80"
+      links:
+        - "my-nodejs-ansible"
+      volumes: "/var/configuration/:/etc/nginx/conf.d/:rw" 
+
